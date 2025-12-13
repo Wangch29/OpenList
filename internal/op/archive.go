@@ -526,6 +526,13 @@ func ArchiveDecompress(ctx context.Context, storage driver.Driver, srcPath, dstD
 	default:
 		return errs.NotImplement
 	}
+	if err == nil {
+		paths := []string{dstDirPath}
+		for _, obj := range newObjs {
+			paths = append(paths, utils.FixAndCleanPath(stdpath.Join(dstDirPath, obj.GetName())))
+		}
+		invalidateDirMod(storage, paths...)
+	}
 	if !utils.IsBool(lazyCache...) && err == nil && needHandleObjsUpdateHook() {
 		onlyList := false
 		targetPath := dstDirPath

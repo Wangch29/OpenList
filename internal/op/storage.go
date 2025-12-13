@@ -19,6 +19,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/time/rate"
 )
 
 // Although the driver type is stored,
@@ -147,6 +148,18 @@ func initStorage(ctx context.Context, storage model.Storage, storageDriver drive
 		driverStorage.SetStatus(WORK)
 	}
 	MustSaveDriverStorage(storageDriver)
+
+	if err == nil {
+		// 缓存预热.
+		go func() {
+			// 创建限流器，每秒 20 个请求
+			limiter := rate.NewLimiter(20, 1)
+			// 递归遍历根目录 "/"，因为 List 函数里已经加了 updateParentDirModified，
+			// 所以这个遍历过程会自动修正所有文件夹的修改时间
+			RecursivelyListStorage(context.Background(), storageDriver, "/", limiter, nil)
+		}()
+	}
+
 	return err
 }
 

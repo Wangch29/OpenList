@@ -8,6 +8,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/cache"
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
+	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 )
 
 type CacheManager struct {
@@ -16,6 +17,7 @@ type CacheManager struct {
 	userCache    *cache.KeyedCache[*model.User]           // Cache for user data
 	settingCache *cache.KeyedCache[any]                   // Cache for settings
 	detailCache  *cache.KeyedCache[*model.StorageDetails] // Cache for storage details
+	dirModCache  *cache.KeyedCache[time.Time]             // Cache for aggregated directory modified times
 }
 
 func NewCacheManager() *CacheManager {
@@ -25,6 +27,7 @@ func NewCacheManager() *CacheManager {
 		userCache:    cache.NewKeyedCache[*model.User](time.Hour),
 		settingCache: cache.NewKeyedCache[any](time.Hour),
 		detailCache:  cache.NewKeyedCache[*model.StorageDetails](time.Minute * 30),
+		dirModCache:  cache.NewKeyedCache[time.Time](time.Hour * 24 * 365 * 100),
 	}
 }
 
@@ -75,6 +78,7 @@ func (cm *CacheManager) DeleteDirectoryTree(storage driver.Driver, dirPath strin
 	cm.deleteDirectoryTree(Key(storage, dirPath))
 }
 func (cm *CacheManager) deleteDirectoryTree(key string) {
+	cm.dirModCache.Delete(key)
 	if dirCache, exists := cm.dirCache.Take(key); exists {
 		for _, obj := range dirCache.objs {
 			if obj.IsDir() {
@@ -89,7 +93,9 @@ func (cm *CacheManager) DeleteDirectory(storage driver.Driver, dirPath string) {
 	if storage.Config().NoCache {
 		return
 	}
-	cm.dirCache.Delete(Key(storage, dirPath))
+	key := Key(storage, dirPath)
+	cm.dirCache.Delete(key)
+	cm.dirModCache.Delete(key)
 }
 
 // remove object from dirCache.
@@ -180,6 +186,27 @@ func (cm *CacheManager) ClearAll() {
 	cm.userCache.Clear()
 	cm.settingCache.Clear()
 	cm.detailCache.Clear()
+	cm.dirModCache.Clear()
+}
+
+func (cm *CacheManager) setDirModByKey(key string, mod time.Time) {
+	if mod.IsZero() {
+		cm.dirModCache.Delete(key)
+		return
+	}
+	cm.dirModCache.SetWithExpirable(key, mod, cache.NoExpiration{})
+}
+
+func (cm *CacheManager) SetDirMod(storage driver.Driver, path string, mod time.Time) {
+	cm.setDirModByKey(Key(storage, utils.FixAndCleanPath(path)), mod)
+}
+
+func (cm *CacheManager) GetDirMod(storage driver.Driver, path string) (time.Time, bool) {
+	return cm.dirModCache.Get(Key(storage, utils.FixAndCleanPath(path)))
+}
+
+func (cm *CacheManager) DeleteDirMod(storage driver.Driver, path string) {
+	cm.dirModCache.Delete(Key(storage, utils.FixAndCleanPath(path)))
 }
 
 type directoryCache struct {

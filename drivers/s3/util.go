@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
@@ -171,7 +172,7 @@ func (d *S3) listV2(dirPath string, args model.ListArgs) ([]model.Obj, error) {
 			file := model.Object{
 				Path:     path.Join(dirPath, name),
 				Name:     name,
-				Modified: d.Modified,
+				Modified: time.Time{}, // d.Modified,  // TODO:
 				IsFolder: true,
 			}
 			files = append(files, &file)
